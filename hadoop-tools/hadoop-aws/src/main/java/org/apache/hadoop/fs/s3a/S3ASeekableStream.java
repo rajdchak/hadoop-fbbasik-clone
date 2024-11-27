@@ -1,3 +1,22 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements. See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership. The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License. You may obtain a copy of the License at
+ *
+ *   http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
+ */
+
 package org.apache.hadoop.fs.s3a;
 
 import java.io.IOException;
@@ -47,6 +66,15 @@ public class S3ASeekableStream extends FSInputStream {
     }
 
 
+    /**
+     * Reads the last n bytes from the stream into a byte buffer. Blocks until end of stream is
+     * reached. Leaves the position of the stream unaltered.
+     *
+     * @param buf buffer to read data into
+     * @param off start position in buffer at which data is written
+     * @param n the number of bytes to read; the n-th byte should be the last byte of the stream.
+     * @return the total number of bytes read into the buffer
+     */
     public void readTail(byte[] buf, int off, int n) throws IOException {
         throwIfClosed();
         inputStream.readTail(buf, off, n);
