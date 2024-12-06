@@ -159,6 +159,10 @@ import org.apache.hadoop.fs.s3a.impl.StoreContextFactory;
 import org.apache.hadoop.fs.s3a.impl.UploadContentProviders;
 import org.apache.hadoop.fs.s3a.impl.CSEUtils;
 import org.apache.hadoop.fs.s3a.prefetch.S3APrefetchingInputStream;
+import org.apache.hadoop.fs.s3a.streams.ClassicInputStreamFactory;
+import org.apache.hadoop.fs.s3a.streams.FactoryStreamParameters;
+import org.apache.hadoop.fs.s3a.streams.InputStreamFactory;
+import org.apache.hadoop.fs.s3a.streams.StreamReadCallbacks;
 import org.apache.hadoop.fs.s3a.tools.MarkerToolOperations;
 import org.apache.hadoop.fs.s3a.tools.MarkerToolOperationsImpl;
 import org.apache.hadoop.fs.statistics.DurationTracker;
@@ -312,9 +316,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
   private String username;
 
-  /**
-   * Store back end.
-   */
   private S3AStore store;
 
   /**
@@ -376,7 +377,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   /** Log to warn of storage class configuration problems. */
   private static final LogExactlyOnce STORAGE_CLASS_WARNING = new LogExactlyOnce(LOG);
 
-  private LocalDirAllocator directoryAllocator;
   private String cannedACL;
 
   /**
@@ -840,12 +840,12 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       s3AccessGrantsEnabled = conf.getBoolean(AWS_S3_ACCESS_GRANTS_ENABLED, false);
 
       int rateLimitCapacity = intOption(conf, S3A_IO_RATE_LIMIT, DEFAULT_S3A_IO_RATE_LIMIT, 0);
-      // now create the store
+      // now create and initialize the store
       store = createS3AStore(clientManager, rateLimitCapacity);
       // the s3 client is created through the store, rather than
       // directly through the client manager.
       // this is to aid mocking.
-      s3Client = store.getOrCreateS3Client();
+      s3Client = getStore().getOrCreateS3Client();
 
       if (this.analyticsAcceleratorEnabled) {
         LOG.info("Using S3SeekableInputStream");
@@ -909,7 +909,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
 
   /**
-   * Create the S3AStore instance.
+   * Create and start the S3AStore instance.
    * This is protected so that tests can override it.
    * @param clientManager client manager
    * @param rateLimitCapacity rate limit
@@ -918,7 +918,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   @VisibleForTesting
   protected S3AStore createS3AStore(final ClientManager clientManager,
       final int rateLimitCapacity) {
-    return new S3AStoreBuilder()
+    final S3AStore st = new S3AStoreBuilder()
         .withAuditSpanSource(getAuditManager())
         .withClientManager(clientManager)
         .withDurationTrackerFactory(getDurationTrackerFactory())
@@ -930,6 +930,9 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         .withReadRateLimiter(unlimitedRate())
         .withWriteRateLimiter(RateLimitingFactory.create(rateLimitCapacity))
         .build();
+    st.init(getConf());
+    st.start();
+    return st;
   }
 
   /**
@@ -1402,6 +1405,15 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     return performanceFlags;
   }
 
+
+  /**
+   * Get the store for low-level operations.
+   * @return the store the S3A FS is working through.
+   */
+  private S3AStore getStore() {
+    return store;
+  }
+
   /**
    * Implementation of all operations used by delegation tokens.
    */
@@ -1607,7 +1619,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
     @Override
     public S3AStore getStore() {
-      return store;
+      return S3AFileSystem.this.getStore();
     }
 
     /**
@@ -1736,28 +1748,8 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    */
   File createTmpFileForWrite(String pathStr, long size,
       Configuration conf) throws IOException {
-    initLocalDirAllocatorIfNotInitialized(conf);
-    Path path = directoryAllocator.getLocalPathForWrite(pathStr,
-        size, conf);
-    File dir = new File(path.getParent().toUri().getPath());
-    String prefix = path.getName();
-    // create a temp file on this directory
-    return File.createTempFile(prefix, null, dir);
-  }
 
-  /**
-   * Initialize dir allocator if not already initialized.
-   *
-   * @param conf The Configuration object.
-   */
-  private void initLocalDirAllocatorIfNotInitialized(Configuration conf) {
-    if (directoryAllocator == null) {
-      synchronized (this) {
-        String bufferDir = conf.get(BUFFER_DIR) != null
-            ? BUFFER_DIR : HADOOP_TMP_DIR;
-        directoryAllocator = new LocalDirAllocator(bufferDir);
-      }
-    }
+    return getS3AInternals().getStore().createTemporaryFileForWriting(pathStr, size, conf);
   }
 
   /**
@@ -1934,8 +1926,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       final Path path,
       final OpenFileSupport.OpenFileInformation fileInformation)
       throws IOException {
-
-
     // create the input stream statistics before opening
     // the file so that the time to prepare to open the file is included.
     S3AInputStreamStatistics inputStreamStats =
@@ -1962,7 +1952,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
     if (this.prefetchEnabled) {
       Configuration configuration = getConf();
-      initLocalDirAllocatorIfNotInitialized(configuration);
+
       return new FSDataInputStream(
           new S3APrefetchingInputStream(
               readContext.build(),
@@ -1970,19 +1960,30 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
               createInputStreamCallbacks(auditSpan),
               inputStreamStats,
               configuration,
-              directoryAllocator));
+              getStore().getDirectoryAllocator()));
     } else {
+
+      // create the factory.
+      // TODO: move into S3AStore and export the factory API through
+      // the store, which will add some of the features (callbacks, stats)
+      // before invoking the real factory
+      InputStreamFactory factory = new ClassicInputStreamFactory();
+      factory.init(getConf());
+      factory.start();
+      FactoryStreamParameters parameters = new FactoryStreamParameters()
+          .withCallbacks(createInputStreamCallbacks(auditSpan))
+          .withObjectAttributes(createObjectAttributes(path, fileStatus))
+          .withContext(readContext.build())
+          .withStreamStatistics(inputStreamStats)
+          .withBoundedThreadPool(new SemaphoredDelegatingExecutor(
+              boundedThreadPool,
+              vectoredActiveRangeReads,
+              true,
+              inputStreamStats))
+          .build();
+
       return new FSDataInputStream(
-          new S3AInputStream(
-              readContext.build(),
-              createObjectAttributes(path, fileStatus),
-              createInputStreamCallbacks(auditSpan),
-                  inputStreamStats,
-                  new SemaphoredDelegatingExecutor(
-                          boundedThreadPool,
-                          vectoredActiveRangeReads,
-                          true,
-                          inputStreamStats)));
+          factory.create(parameters));
     }
   }
 
@@ -1990,7 +1991,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    * Override point: create the callbacks for S3AInputStream.
    * @return an implementation of the InputStreamCallbacks,
    */
-  private S3AInputStream.InputStreamCallbacks createInputStreamCallbacks(
+  private StreamReadCallbacks createInputStreamCallbacks(
       final AuditSpan auditSpan) {
     return new InputStreamCallbacksImpl(auditSpan);
   }
@@ -1999,7 +2000,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    * Operations needed by S3AInputStream to read data.
    */
   private final class InputStreamCallbacksImpl implements
-      S3AInputStream.InputStreamCallbacks {
+      StreamReadCallbacks {
 
     /**
      * Audit span to activate before each call.
@@ -2035,7 +2036,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         IOException {
       // active the audit span used for the operation
       try (AuditSpan span = auditSpan.activate()) {
-        return fsHandler.getObject(store, request, getRequestFactory());
+        return fsHandler.getObject(getStore(), request, getRequestFactory());
       }
     }
 
@@ -2065,7 +2066,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     @Retries.OnceRaw
     public CompleteMultipartUploadResponse completeMultipartUpload(
         CompleteMultipartUploadRequest request) {
-      return store.completeMultipartUpload(request);
+      return getStore().completeMultipartUpload(request);
     }
 
     @Override
@@ -2075,7 +2076,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         final RequestBody body,
         final DurationTrackerFactory durationTrackerFactory)
         throws AwsServiceException, UncheckedIOException {
-      return store.uploadPart(request, body, durationTrackerFactory);
+      return getStore().uploadPart(request, body, durationTrackerFactory);
     }
 
     /**
@@ -2872,7 +2873,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
      */
     @Override
     public long getObjectSize(S3Object s3Object) throws IOException {
-      return fsHandler.getS3ObjectSize(s3Object.key(), s3Object.size(), store, null);
+      return fsHandler.getS3ObjectSize(s3Object.key(), s3Object.size(), getStore(), null);
     }
 
     @Override
@@ -3103,7 +3104,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    */
   protected DurationTrackerFactory nonNullDurationTrackerFactory(
       DurationTrackerFactory factory) {
-    return store.nonNullDurationTrackerFactory(factory);
+    return getStore().nonNullDurationTrackerFactory(factory);
   }
 
   /**
@@ -3141,7 +3142,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       ChangeTracker changeTracker,
       Invoker changeInvoker,
       String operation) throws IOException {
-    return store.headObject(key, changeTracker, changeInvoker, fsHandler, operation);
+    return getStore().headObject(key, changeTracker, changeInvoker, fsHandler, operation);
   }
 
   /**
@@ -3289,7 +3290,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   protected void deleteObject(String key)
       throws SdkException, IOException {
     incrementWriteOperations();
-    store.deleteObject(getRequestFactory()
+    getStore().deleteObject(getRequestFactory()
         .newDeleteObjectRequestBuilder(key)
         .build());
   }
@@ -3343,7 +3344,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   private DeleteObjectsResponse deleteObjects(DeleteObjectsRequest deleteRequest)
       throws MultiObjectDeleteException, SdkException, IOException {
     incrementWriteOperations();
-    DeleteObjectsResponse response = store.deleteObjects(deleteRequest).getValue();
+    DeleteObjectsResponse response = getStore().deleteObjects(deleteRequest).getValue();
     if (!response.errors().isEmpty()) {
       throw new MultiObjectDeleteException(response.errors());
     }
@@ -3386,7 +3387,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   @Retries.OnceRaw
   public UploadInfo putObject(PutObjectRequest putObjectRequest, File file,
       ProgressableProgressListener listener) throws IOException {
-    return store.putObject(putObjectRequest, file, listener);
+    return getStore().putObject(putObjectRequest, file, listener);
   }
 
   /**
@@ -3487,7 +3488,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    * @param bytes bytes in the request.
    */
   protected void incrementPutStartStatistics(long bytes) {
-    store.incrementPutStartStatistics(bytes);
+    getStore().incrementPutStartStatistics(bytes);
   }
 
   /**
@@ -3498,7 +3499,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    * @param bytes bytes in the request.
    */
   protected void incrementPutCompletedStatistics(boolean success, long bytes) {
-    store.incrementPutCompletedStatistics(success, bytes);
+    getStore().incrementPutCompletedStatistics(success, bytes);
   }
 
   /**
@@ -3509,7 +3510,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    * @param bytes bytes successfully uploaded.
    */
   protected void incrementPutProgressStatistics(String key, long bytes) {
-    store.incrementPutProgressStatistics(key, bytes);
+    getStore().incrementPutProgressStatistics(key, bytes);
   }
 
   /**
@@ -4389,9 +4390,9 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     String key = putObjectRequest.key();
     long len = getPutRequestLength(putObjectRequest);
     ProgressableProgressListener listener =
-        new ProgressableProgressListener(store, putObjectRequest.key(), progress);
+        new ProgressableProgressListener(getStore(), putObjectRequest.key(), progress);
     UploadInfo info = putObject(putObjectRequest, file, listener);
-    PutObjectResponse result = store.waitForUploadCompletion(key, info).response();
+    PutObjectResponse result = getStore().waitForUploadCompletion(key, info).response();
     listener.uploadCompleted(info.getFileUpload());
 
     // post-write actions
@@ -4489,7 +4490,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   protected synchronized void stopAllServices() {
     try {
       trackDuration(getDurationTrackerFactory(), FILESYSTEM_CLOSE.getSymbol(), () -> {
-        closeAutocloseables(LOG, store, s3SeekableInputStreamFactory);
+        closeAutocloseables(LOG, getStore());
         store = null;
         s3Client = null;
         s3AsyncClient = null;
@@ -4712,7 +4713,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
           () -> {
             incrementStatistic(OBJECT_COPY_REQUESTS);
 
-            Copy copy = store.getOrCreateTransferManager().copy(
+            Copy copy = getStore().getOrCreateTransferManager().copy(
                 CopyRequest.builder()
                     .copyObjectRequest(copyRequest)
                     .build());
@@ -5927,7 +5928,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
    */
   protected BulkDeleteOperation.BulkDeleteOperationCallbacks createBulkDeleteCallbacks(
       Path path, int pageSize, AuditSpanS3A span) {
-    return new BulkDeleteOperationCallbacksImpl(store, pathToKey(path), pageSize, span);
+    return new BulkDeleteOperationCallbacksImpl(getStore(), pathToKey(path), pageSize, span);
   }
 
 }
