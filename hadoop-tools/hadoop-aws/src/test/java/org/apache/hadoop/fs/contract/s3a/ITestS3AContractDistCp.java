@@ -20,6 +20,7 @@ package org.apache.hadoop.fs.contract.s3a;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.S3ATestConstants.SCALE_TEST_TIMEOUT_MILLIS;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfAnalyticsAcceleratorEnabled;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.StorageStatistics;
@@ -76,6 +77,14 @@ public class ITestS3AContractDistCp extends AbstractContractDistCpTest {
     super.testNonDirectWrite();
     assertEquals("Expected 2 renames for a non-direct write distcp", 2L,
         getRenameOperationCount() - renames);
+  }
+
+  @Override
+  public void testDistCpUpdateCheckFileSkip() throws Exception {
+    //Will remove this when Analytics Accelerator supports overwrites
+    skipIfAnalyticsAcceleratorEnabled(createConfiguration(),
+        "Analytics Accelerator Library does not support update to existing files");
+    super.testDistCpUpdateCheckFileSkip();
   }
 
   private long getRenameOperationCount() {
