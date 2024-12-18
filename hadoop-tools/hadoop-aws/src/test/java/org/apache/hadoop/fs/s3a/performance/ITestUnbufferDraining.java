@@ -54,6 +54,7 @@ import static org.apache.hadoop.fs.s3a.Constants.REQUEST_TIMEOUT;
 import static org.apache.hadoop.fs.s3a.Constants.RETRY_LIMIT;
 import static org.apache.hadoop.fs.s3a.Constants.SOCKET_TIMEOUT;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfAnalyticsAcceleratorEnabled;
 import static org.apache.hadoop.fs.s3a.impl.ConfigurationHelper.setDurationAsSeconds;
 import static org.apache.hadoop.fs.statistics.IOStatisticAssertions.verifyStatisticCounterValue;
 import static org.apache.hadoop.fs.statistics.IOStatisticsSupport.retrieveIOStatistics;
@@ -118,6 +119,9 @@ public class ITestUnbufferDraining extends AbstractS3ACostTest {
   @Override
   public void setup() throws Exception {
     super.setup();
+    skipIfAnalyticsAcceleratorEnabled(getConfiguration(),
+        "Skipping because getS3AInputStream will " +
+            "try to cast S3SeekableStream to S3AInputStream");
 
     // now create a new FS with minimal http capacity and recovery
     // a separate one is used to avoid test teardown suffering

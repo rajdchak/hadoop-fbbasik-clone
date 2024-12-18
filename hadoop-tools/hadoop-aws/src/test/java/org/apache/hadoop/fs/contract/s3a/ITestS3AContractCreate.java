@@ -31,9 +31,8 @@ import org.apache.hadoop.fs.s3a.S3ATestUtils;
 
 import static org.apache.hadoop.fs.s3a.S3ATestConstants.KEY_PERFORMANCE_TESTS_ENABLED;
 import static org.apache.hadoop.fs.s3a.Constants.CONNECTION_EXPECT_CONTINUE;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.setPerformanceFlags;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfNotEnabled;
+
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.*;
 
 /**
  * S3A contract tests creating files.
@@ -91,6 +90,14 @@ public class ITestS3AContractCreate extends AbstractContractCreateTest {
     }
     S3ATestUtils.disableFilesystemCaching(conf);
     return conf;
+  }
+
+  @Override
+  public void testOverwriteExistingFile() throws Throwable {
+    // Will remove this when Analytics Accelerator supports overwrites
+    skipIfAnalyticsAcceleratorEnabled(this.createConfiguration(),
+        "Analytics Accelerator does not support overwrites yet");
+    super.testOverwriteExistingFile();
   }
 
   @Override

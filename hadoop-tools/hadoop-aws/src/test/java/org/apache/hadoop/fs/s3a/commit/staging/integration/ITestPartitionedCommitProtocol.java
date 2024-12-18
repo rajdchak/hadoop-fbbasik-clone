@@ -32,9 +32,18 @@ import org.apache.hadoop.mapreduce.JobStatus;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 import static org.apache.hadoop.fs.contract.ContractTestUtils.skip;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.skipIfAnalyticsAcceleratorEnabled;
 
 /** ITest of the low level protocol methods. */
 public class ITestPartitionedCommitProtocol extends ITestStagingCommitProtocol {
+
+
+  @Override
+  public void setup() throws Exception {
+    super.setup();
+    skipIfAnalyticsAcceleratorEnabled(getConfiguration(),
+        "Skipping because these tests will fail when using CRT client");
+  }
 
   @Override
   protected String suitename() {
