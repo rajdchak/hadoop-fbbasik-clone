@@ -52,7 +52,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.Nullable;
 
-import software.amazon.awssdk.core.ResponseInputStream;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
@@ -60,8 +59,6 @@ import software.amazon.awssdk.services.s3.internal.crt.S3CrtAsyncClient;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.GetBucketLocationRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectRequest;
-import software.amazon.awssdk.services.s3.model.GetObjectResponse;
 import software.amazon.awssdk.services.s3.model.HeadBucketRequest;
 import software.amazon.awssdk.services.s3.model.HeadBucketResponse;
 import software.amazon.awssdk.services.s3.model.MultipartUpload;
@@ -159,11 +156,9 @@ import org.apache.hadoop.fs.s3a.impl.StoreContextBuilder;
 import org.apache.hadoop.fs.s3a.impl.StoreContextFactory;
 import org.apache.hadoop.fs.s3a.impl.UploadContentProviders;
 import org.apache.hadoop.fs.s3a.impl.CSEUtils;
-import org.apache.hadoop.fs.s3a.prefetch.PrefetchingInputStreamFactory;
-import org.apache.hadoop.fs.s3a.impl.ClassicObjectInputStreamFactory;
-import org.apache.hadoop.fs.s3a.impl.model.ObjectReadParameters;
-import org.apache.hadoop.fs.s3a.impl.model.ObjectInputStreamFactory;
-import org.apache.hadoop.fs.s3a.impl.model.ObjectInputStreamCallbacks;
+import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStreamFactory;
+import org.apache.hadoop.fs.s3a.impl.streams.ObjectReadParameters;
+import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStreamCallbacks;
 import org.apache.hadoop.fs.s3a.tools.MarkerToolOperations;
 import org.apache.hadoop.fs.s3a.tools.MarkerToolOperationsImpl;
 import org.apache.hadoop.fs.statistics.DurationTracker;
@@ -179,7 +174,6 @@ import org.apache.hadoop.fs.store.audit.AuditEntryPoint;
 import org.apache.hadoop.fs.store.audit.ActiveThreadSpanSource;
 import org.apache.hadoop.fs.store.audit.AuditSpan;
 import org.apache.hadoop.fs.store.audit.AuditSpanSource;
-import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.token.DelegationTokenIssuer;
@@ -355,24 +349,17 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   private ExecutorService boundedThreadPool;
   private ThreadPoolExecutor unboundedThreadPool;
 
-  // S3 reads are prefetched asynchronously using this future pool.
+  /**
+   * Future pool built on the bounded thread pool.
+   */
   private ExecutorServiceFuturePool futurePool;
 
-  // If true, the prefetching input stream is used for reads.
-  private boolean prefetchEnabled;
+    // If true, S3SeekableInputStream from Analytics Accelerator for Amazon S3 will be used.
+    private boolean analyticsAcceleratorEnabled;
 
-  // If true, S3SeekableInputStream from Analytics Accelerator for Amazon S3 will be used.
-  private boolean analyticsAcceleratorEnabled;
+    private boolean analyticsAcceleratorCRTEnabled;
 
-  private boolean analyticsAcceleratorCRTEnabled;
-
-  // Size in bytes of a single prefetch block.
-  private int prefetchBlockSize;
-
-  // Size of prefetch queue (in number of blocks).
-  private int prefetchBlockCount;
-
-  private int executorCapacity;
+    private int executorCapacity;
   private long multiPartThreshold;
   public static final Logger LOG = LoggerFactory.getLogger(S3AFileSystem.class);
 
@@ -697,23 +684,14 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       dirOperationsPurgeUploads = conf.getBoolean(DIRECTORY_OPERATIONS_PURGE_UPLOADS,
           s3ExpressStore);
 
-      this.prefetchEnabled = conf.getBoolean(PREFETCH_ENABLED_KEY, PREFETCH_ENABLED_DEFAULT);
-      long prefetchBlockSizeLong =
-          longBytesOption(conf, PREFETCH_BLOCK_SIZE_KEY, PREFETCH_BLOCK_DEFAULT_SIZE, 1);
-      if (prefetchBlockSizeLong > (long) Integer.MAX_VALUE) {
-        throw new IOException("S3A prefatch block size exceeds int limit");
-      }
-      this.prefetchBlockSize = (int) prefetchBlockSizeLong;
-      this.prefetchBlockCount =
-          intOption(conf, PREFETCH_BLOCK_COUNT_KEY, PREFETCH_BLOCK_DEFAULT_COUNT, 1);
+        this.analyticsAcceleratorEnabled =
+                conf.getBoolean(ANALYTICS_ACCELERATOR_ENABLED_KEY, ANALYTICS_ACCELERATOR_ENABLED_DEFAULT);
+        this.analyticsAcceleratorCRTEnabled =
+                conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
+                        ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
 
-      this.analyticsAcceleratorEnabled =
-          conf.getBoolean(ANALYTICS_ACCELERATOR_ENABLED_KEY, ANALYTICS_ACCELERATOR_ENABLED_DEFAULT);
-      this.analyticsAcceleratorCRTEnabled =
-          conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
-              ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
 
-      this.isMultipartUploadEnabled = conf.getBoolean(MULTIPART_UPLOADS_ENABLED,
+        this.isMultipartUploadEnabled = conf.getBoolean(MULTIPART_UPLOADS_ENABLED,
               DEFAULT_MULTIPART_UPLOAD_ENABLED);
 
       if(this.analyticsAcceleratorEnabled && !analyticsAcceleratorCRTEnabled) {
@@ -723,8 +701,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
       // multipart copy and upload are the same; this just makes it explicit
       this.isMultipartCopyEnabled = isMultipartUploadEnabled;
-
-      initThreadPools(conf);
 
       int listVersion = conf.getInt(LIST_VERSION, DEFAULT_LIST_VERSION);
       if (listVersion < 1 || listVersion > 2) {
@@ -848,6 +824,10 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       // directly through the client manager.
       // this is to aid mocking.
       s3Client = getStore().getOrCreateS3Client();
+
+      // thread pool init requires store to be created
+      initThreadPools();
+
 
       if (this.analyticsAcceleratorEnabled) {
         LOG.info("Using S3SeekableInputStream");
@@ -1017,12 +997,15 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   }
 
   /**
-   * Initialize the thread pool.
+   * Initialize the thread pools.
    * This must be re-invoked after replacing the S3Client during test
    * runs.
    * @param conf configuration.
    */
-  private void initThreadPools(Configuration conf) {
+  private void initThreadPools() {
+
+    Configuration conf = getConf();
+
     final String name = "s3a-transfer-" + getBucket();
     int maxThreads = conf.getInt(MAX_THREADS, DEFAULT_MAX_THREADS);
     if (maxThreads < 2) {
@@ -1038,7 +1021,9 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
             TimeUnit.SECONDS,
             Duration.ZERO).getSeconds();
 
-    int numPrefetchThreads = this.prefetchEnabled ? this.prefetchBlockCount : 0;
+    final ObjectInputStreamFactory.ThreadOptions requirements =
+        getStore().prefetchThreadRequirements();
+    int numPrefetchThreads = requirements.sharedThreads();
 
     int activeTasksForBoundedThreadPool = maxThreads;
     int waitingTasksForBoundedThreadPool = maxThreads + totalTasks + numPrefetchThreads;
@@ -1056,7 +1041,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     unboundedThreadPool.allowCoreThreadTimeOut(true);
     executorCapacity = intOption(conf,
         EXECUTOR_CAPACITY, DEFAULT_EXECUTOR_CAPACITY, 1);
-    if (prefetchEnabled) {
+    if (requirements.createFuturePool()) {
       final S3AInputStreamStatistics s3AInputStreamStatistics =
           statisticsContext.newInputStreamStatistics();
       futurePool = new ExecutorServiceFuturePool(
@@ -2053,9 +2038,8 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         fileStatus,
         vectoredIOContext,
         IOStatisticsContext.getCurrentIOStatisticsContext().getAggregator(),
-        futurePool,
-        prefetchBlockSize,
-        prefetchBlockCount)
+        futurePool
+    )
         .withAuditSpan(auditSpan);
     openFileHelper.applyDefaultOptions(roc);
     return roc.build();
@@ -5587,7 +5571,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
 
       // stream leak detection.
     case StreamStatisticNames.STREAM_LEAKS:
-      return !prefetchEnabled;
+      return true;
 
     default:
       // is it a performance flag?
