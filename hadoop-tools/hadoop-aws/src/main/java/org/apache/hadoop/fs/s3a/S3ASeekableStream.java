@@ -31,6 +31,7 @@ import org.apache.hadoop.fs.FSInputStream;
 
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStream;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamFactory;
+import software.amazon.s3.analyticsaccelerator.request.AuditHeaders;
 import software.amazon.s3.analyticsaccelerator.util.S3URI;
 
 public class S3ASeekableStream extends FSInputStream implements StreamCapabilities {
@@ -42,9 +43,8 @@ public class S3ASeekableStream extends FSInputStream implements StreamCapabiliti
 
   public static final Logger LOG = LoggerFactory.getLogger(S3ASeekableStream.class);
 
-  public S3ASeekableStream(String bucket, String key,
-                           S3SeekableInputStreamFactory s3SeekableInputStreamFactory) {
-    this.inputStream = s3SeekableInputStreamFactory.createStream(S3URI.of(bucket, key));
+  public S3ASeekableStream(String bucket, String key, S3SeekableInputStreamFactory s3SeekableInputStreamFactory, AuditHeaders auditHeaders) {
+    this.inputStream = s3SeekableInputStreamFactory.createStream(S3URI.of(bucket, key), auditHeaders);
     this.key = key;
   }
 
