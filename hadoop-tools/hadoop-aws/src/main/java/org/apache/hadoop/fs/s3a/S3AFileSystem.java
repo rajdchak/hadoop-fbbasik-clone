@@ -229,7 +229,7 @@ import org.apache.hadoop.util.RateLimitingFactory;
 import org.apache.hadoop.util.SemaphoredDelegatingExecutor;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.hadoop.util.functional.CallableRaisingIOE;
-import software.amazon.s3.analyticsaccelerator.request.AuditHeaders;
+import software.amazon.s3.analyticsaccelerator.request.StreamContext;
 import software.amazon.s3.analyticsaccelerator.request.ObjectClient;
 
 import static java.util.Objects.requireNonNull;
@@ -1960,13 +1960,13 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
     if (this.analyticsAcceleratorEnabled) {
       ActiveAuditManagerS3A.WrappingAuditSpan wrappingAuditSpan = (ActiveAuditManagerS3A.WrappingAuditSpan) auditSpan;
       LoggingAuditor.LoggingAuditSpan loggingAuditSpan = (LoggingAuditor.LoggingAuditSpan) wrappingAuditSpan.getSpan();
-      AuditHeaders auditHeaders = new S3AAuditHeaders(loggingAuditSpan.getReferrer());
+      StreamContext streamContext = new S3AStreamContext(loggingAuditSpan.getReferrer());
       return new FSDataInputStream(
               new S3ASeekableStream(
                       this.bucket,
                       pathToKey(path),
                       s3SeekableInputStreamFactory,
-                      auditHeaders));
+                      streamContext));
     }
 
     if (this.prefetchEnabled) {
