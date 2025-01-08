@@ -97,13 +97,6 @@ public class ITestUnbufferDraining extends AbstractS3ACostTest {
    */
   private FileSystem brittleFS;
 
-  /**
-   * Create with markers kept, always.
-   */
-  public ITestUnbufferDraining() {
-    super(false);
-  }
-
   @Override
   public Configuration createConfiguration() {
     Configuration conf = disablePrefetching(super.createConfiguration());
