@@ -1946,7 +1946,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
         statisticsContext.newInputStreamStatistics();
     // this span is passed into the stream.
     final AuditSpan auditSpan = entryPoint(INVOCATION_OPEN, path);
-    System.out.println("AuditSpan class: " + auditSpan.getClass().getName());
     final S3AFileStatus fileStatus =
         trackDuration(inputStreamStats,
             ACTION_FILE_OPENED.getSymbol(), () ->
