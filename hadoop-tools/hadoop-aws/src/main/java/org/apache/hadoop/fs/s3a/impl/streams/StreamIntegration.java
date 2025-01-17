@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.store.LogExactlyOnce;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 import static org.apache.hadoop.fs.s3a.Constants.INPUT_STREAM_TYPE;
 import static org.apache.hadoop.fs.s3a.Constants.PREFETCH_ENABLED_KEY;
@@ -57,6 +58,18 @@ public final class StreamIntegration {
     }
     return conf.getEnum(INPUT_STREAM_TYPE, defaultStream)
         .factory()
-        .apply(conf);
+        .apply(conf, null);
   }
+
+  /**
+   * Create the s3 seekable input stream factory.
+   * @param s3AsyncClient s3 async client
+   * @return a stream factory.
+   */
+  public static ObjectInputStreamFactory createStreamFactory(final Configuration conf, final S3AsyncClient s3AsyncClient) {
+    InputStreamType defaultStream = InputStreamType.DEFAULT_STREAM_TYPE;
+    return conf.getEnum(INPUT_STREAM_TYPE, defaultStream)
+            .factory()
+            .apply(conf, s3AsyncClient);  }
+
 }

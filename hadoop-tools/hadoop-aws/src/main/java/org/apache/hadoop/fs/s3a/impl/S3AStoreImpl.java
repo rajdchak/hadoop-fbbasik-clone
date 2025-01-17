@@ -29,6 +29,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletionException;
 import javax.annotation.Nullable;
 
+import org.apache.hadoop.fs.s3a.impl.streams.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import software.amazon.awssdk.awscore.exception.AwsServiceException;
@@ -37,6 +38,7 @@ import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.internal.crt.S3CrtAsyncClient;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadRequest;
 import software.amazon.awssdk.services.s3.model.CompleteMultipartUploadResponse;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
@@ -73,10 +75,6 @@ import org.apache.hadoop.fs.s3a.Statistic;
 import org.apache.hadoop.fs.s3a.UploadInfo;
 import org.apache.hadoop.fs.s3a.api.RequestFactory;
 import org.apache.hadoop.fs.s3a.audit.AuditSpanS3A;
-import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStream;
-import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStreamFactory;
-import org.apache.hadoop.fs.s3a.impl.streams.ObjectReadParameters;
-import org.apache.hadoop.fs.s3a.impl.streams.StreamThreadOptions;
 import org.apache.hadoop.fs.s3a.statistics.S3AStatisticsContext;
 import org.apache.hadoop.fs.statistics.DurationTracker;
 import org.apache.hadoop.fs.statistics.DurationTrackerFactory;
@@ -88,8 +86,7 @@ import org.apache.hadoop.util.RateLimiting;
 import org.apache.hadoop.util.functional.Tuples;
 
 import static java.util.Objects.requireNonNull;
-import static org.apache.hadoop.fs.s3a.Constants.BUFFER_DIR;
-import static org.apache.hadoop.fs.s3a.Constants.HADOOP_TMP_DIR;
+import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.S3AUtils.extractException;
 import static org.apache.hadoop.fs.s3a.S3AUtils.getPutRequestLength;
 import static org.apache.hadoop.fs.s3a.S3AUtils.isThrottleException;
@@ -230,11 +227,31 @@ public class S3AStoreImpl
   @Override
   protected void serviceInit(final Configuration conf) throws Exception {
 
-    objectInputStreamFactory = createStreamFactory(conf);
+    if(conf.getEnum(INPUT_STREAM_TYPE, InputStreamType.DEFAULT_STREAM_TYPE) == InputStreamType.Analytics) {
+      final S3AsyncClient s3AsyncClient = getOrCreateAsyncCRTClient(conf);
+      objectInputStreamFactory = createStreamFactory(conf, s3AsyncClient);
+    } else {
+      objectInputStreamFactory = createStreamFactory(conf);
+    }
     addService(objectInputStreamFactory);
 
     // init all child services
     super.serviceInit(conf);
+  }
+
+  private S3AsyncClient getOrCreateAsyncCRTClient(final Configuration conf) throws Exception {
+    final S3AsyncClient s3AsyncClient;
+    boolean analyticsAcceleratorCRTEnabled = conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
+            ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
+    LOG.info("Using S3SeekableInputStream");
+    if(analyticsAcceleratorCRTEnabled) {
+      LOG.info("Using S3 CRT client for analytics accelerator S3");
+      s3AsyncClient = S3CrtAsyncClient.builder().maxConcurrency(600).build();
+    } else {
+      LOG.info("Using S3 async client for analytics accelerator S3");
+      s3AsyncClient = getOrCreateAsyncClient();
+    }
+    return s3AsyncClient;
   }
 
   @Override

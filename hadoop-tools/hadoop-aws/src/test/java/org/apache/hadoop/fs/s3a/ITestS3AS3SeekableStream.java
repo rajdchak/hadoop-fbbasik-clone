@@ -28,9 +28,7 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
-import static org.apache.hadoop.fs.s3a.Constants.ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX;
-import static org.apache.hadoop.fs.s3a.Constants.ANALYTICS_ACCELERATOR_ENABLED_KEY;
-import static org.apache.hadoop.fs.s3a.Constants.ANALYTICS_ACCELERATOR_CRT_ENABLED;
+import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
 
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamConfiguration;
@@ -46,8 +44,8 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
     describe("Verify S3 connector framework integration");
 
     Configuration conf = getConfiguration();
-    removeBaseAndBucketOverrides(conf, ANALYTICS_ACCELERATOR_ENABLED_KEY);
-    conf.setBoolean(ANALYTICS_ACCELERATOR_ENABLED_KEY, true);
+    removeBaseAndBucketOverrides(conf, INPUT_STREAM_TYPE);
+    conf.set(INPUT_STREAM_TYPE, "Analytics");
     conf.setBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED, useCrtClient);
 
     String testFile = "s3a://noaa-cors-pds/raw/2023/017/ohfh/OHFH017d.23_.gz";
@@ -94,10 +92,10 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
     S3SeekableInputStreamConfiguration configuration =
         S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration);
 
-    assertSame("S3ASeekableStream configuration is not set to expected value",
+    assertSame("S3ASeekableInputStream configuration is not set to expected value",
         PrefetchMode.ALL, configuration.getLogicalIOConfiguration().getPrefetchingMode());
 
-    assertEquals("S3ASeekableStream configuration is not set to expected value",
+    assertEquals("S3ASeekableInputStream configuration is not set to expected value",
         1, configuration.getPhysicalIOConfiguration().getBlobStoreCapacity());
   }
 
@@ -123,7 +121,7 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
 
     ConnectorConfiguration connectorConfiguration =
         new ConnectorConfiguration(conf, ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX);
-    assertThrows("S3ASeekableStream illegal configuration does not throw",
+    assertThrows("S3ASeekableInputStream illegal configuration does not throw",
         IllegalArgumentException.class, () ->
             S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration));
   }

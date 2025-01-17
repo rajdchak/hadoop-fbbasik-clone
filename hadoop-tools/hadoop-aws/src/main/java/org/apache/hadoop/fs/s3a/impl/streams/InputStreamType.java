@@ -18,10 +18,12 @@
 
 package org.apache.hadoop.fs.s3a.impl.streams;
 
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.prefetch.PrefetchingInputStreamFactory;
+import software.amazon.awssdk.services.s3.S3AsyncClient;
 
 /**
  * Enum of input stream types.
@@ -40,20 +42,17 @@ public enum InputStreamType {
    */
   Prefetch("prefetch", c ->
       new PrefetchingInputStreamFactory()),
-
   /**
    * The analytics input stream.
    */
-  Analytics("analytics", c -> {
-    throw new IllegalArgumentException("not yet supported");
-  });
+  Analytics("analytics", (c, s3AsyncClient) -> new S3ASeekableInputStreamFactory(s3AsyncClient));
 
   /**
    * Name.
    */
   private final String name;
 
-  private final Function<Configuration, ObjectInputStreamFactory> factory;
+  private final BiFunction<Configuration, S3AsyncClient, ObjectInputStreamFactory> factory;
   /**
    * String name.
    * @return the name
@@ -62,7 +61,11 @@ public enum InputStreamType {
     return name;
   }
 
-  InputStreamType(String name, final Function<Configuration, ObjectInputStreamFactory> factory) {
+  InputStreamType(String name, Function<Configuration, ObjectInputStreamFactory> factory) {
+    this(name, (c, s) -> factory.apply(c));
+  }
+
+  InputStreamType(String name, BiFunction<Configuration, S3AsyncClient, ObjectInputStreamFactory> factory) {
     this.name = name;
     this.factory = factory;
   }
@@ -71,7 +74,7 @@ public enum InputStreamType {
    * Factory constructor.
    * @return the factory associated with this stream type.
    */
-  public Function<Configuration, ObjectInputStreamFactory> factory() {
+  public BiFunction<Configuration, S3AsyncClient, ObjectInputStreamFactory> factory() {
     return factory;
   }
 
