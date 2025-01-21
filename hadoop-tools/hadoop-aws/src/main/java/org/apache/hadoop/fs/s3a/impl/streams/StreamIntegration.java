@@ -63,13 +63,17 @@ public final class StreamIntegration {
 
   /**
    * Create the s3 seekable input stream factory.
+   * @param conf configuration
    * @param s3AsyncClient s3 async client
    * @return a stream factory.
    */
   public static ObjectInputStreamFactory createStreamFactory(final Configuration conf, final S3AsyncClient s3AsyncClient) {
+    FactoryParams factoryParams = FactoryParams.builder()
+            .withS3AsyncClient(s3AsyncClient)
+            .build();
     InputStreamType defaultStream = InputStreamType.DEFAULT_STREAM_TYPE;
     return conf.getEnum(INPUT_STREAM_TYPE, defaultStream)
             .factory()
-            .apply(conf, s3AsyncClient);  }
+            .apply(conf, factoryParams);  }
 
 }
