@@ -472,11 +472,18 @@
       <artifactId>amazon-s3-encryption-client-java</artifactId>
       <scope>provided</scope>
     </dependency>
-    <dependency>
+    <!-- <dependency>
       <groupId>software.amazon.s3.analyticsaccelerator</groupId>
       <artifactId>analyticsaccelerator-s3</artifactId>
       <version>0.0.2</version>
       <scope>compile</scope>
+    </dependency> -->
+    <dependency>
+      <groupId>software.amazon.s3.analyticsaccelerator</groupId>
+      <artifactId>analyticsaccelerator-s3</artifactId>
+      <version>0.0.2</version>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/libaws/analyticsaccelerator-s3-0.0.2.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>software.amazon.awssdk.crt</groupId>
