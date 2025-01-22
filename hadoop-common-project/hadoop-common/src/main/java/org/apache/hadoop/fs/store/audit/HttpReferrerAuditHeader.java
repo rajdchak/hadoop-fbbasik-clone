@@ -179,6 +179,23 @@ public final class HttpReferrerAuditHeader {
     initialHeader = buildHttpReferrer();
   }
 
+  
+  /**
+   * Copy constructor.
+   * Creates a deep copy of a HttpReferrerAuditHeader object
+   */
+  public HttpReferrerAuditHeader(HttpReferrerAuditHeader httpReferrerAuditHeader) {
+    this.contextId = requireNonNull(httpReferrerAuditHeader.contextId);
+    this.evaluated = new ConcurrentHashMap<>(httpReferrerAuditHeader.evaluated);
+    this.filter = ImmutableSet.copyOf(httpReferrerAuditHeader.filter);
+    this.operationName = requireNonNull(httpReferrerAuditHeader.operationName);
+    this.path1 = httpReferrerAuditHeader.path1;
+    this.path2 = httpReferrerAuditHeader.path2;
+    this.spanId = requireNonNull(httpReferrerAuditHeader.spanId);
+    this.attributes = new ConcurrentHashMap<>(httpReferrerAuditHeader.attributes);
+    this.initialHeader = httpReferrerAuditHeader.initialHeader;
+  }
+
   /**
    * Build the referrer string.
    * This includes dynamically evaluating all of the evaluated

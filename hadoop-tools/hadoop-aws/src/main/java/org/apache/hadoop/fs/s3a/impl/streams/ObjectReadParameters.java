@@ -24,6 +24,7 @@ import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.s3a.S3AReadOpContext;
 import org.apache.hadoop.fs.s3a.S3ObjectAttributes;
 import org.apache.hadoop.fs.s3a.statistics.S3AInputStreamStatistics;
+import org.apache.hadoop.fs.store.audit.AuditSpan;
 
 import static java.util.Objects.requireNonNull;
 
@@ -47,6 +48,11 @@ public final class ObjectReadParameters {
    * Attributes of the object.
    */
   private S3ObjectAttributes objectAttributes;
+
+  /**
+   *  Audit span.
+   */
+  private AuditSpan auditSpan;
 
   /**
    * Callbacks to the store.
@@ -83,6 +89,23 @@ public final class ObjectReadParameters {
    */
   public ObjectReadParameters withContext(S3AReadOpContext value) {
     context = value;
+    return this;
+  }
+
+  /**
+   * @return Audit Span.
+   */
+  public AuditSpan getAuditSpan() {
+    return auditSpan;
+  }
+
+  /**
+   * Set builder value.
+   * @param value new value
+   * @return the builder
+   */
+  public ObjectReadParameters withAuditSpan(AuditSpan value) {
+    auditSpan = value;
     return this;
   }
 
@@ -175,6 +198,7 @@ public final class ObjectReadParameters {
    */
   public ObjectReadParameters validate() {
     // please keep in alphabetical order.
+    requireNonNull(auditSpan, "auditSpan");
     requireNonNull(boundedThreadPool, "boundedThreadPool");
     requireNonNull(callbacks, "callbacks");
     requireNonNull(context, "context");

@@ -24,9 +24,12 @@ import java.io.IOException;
 
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.StreamCapabilities;
+import org.apache.hadoop.fs.s3a.audit.impl.ActiveAuditManagerS3A;
+import org.apache.hadoop.fs.s3a.audit.impl.LoggingAuditor;
 import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStream;
 import org.apache.hadoop.fs.s3a.impl.streams.ObjectReadParameters;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamFactory;
+import software.amazon.s3.analyticsaccelerator.request.StreamContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +47,9 @@ public class S3ASeekableInputStream extends ObjectInputStream implements StreamC
   public S3ASeekableInputStream(final ObjectReadParameters parameters, final S3SeekableInputStreamFactory s3SeekableInputStreamFactory) {
     super(parameters);
     S3ObjectAttributes s3Attributes = parameters.getObjectAttributes();
-    this.inputStream = s3SeekableInputStreamFactory.createStream(S3URI.of(s3Attributes.getBucket(), s3Attributes.getKey()));
+    StreamContext streamContext = new S3AStreamContext(((LoggingAuditor.LoggingAuditSpan)((ActiveAuditManagerS3A.WrappingAuditSpan)parameters.getAuditSpan()).getSpan()).getReferrer());
+
+    this.inputStream = s3SeekableInputStreamFactory.createStream(S3URI.of(s3Attributes.getBucket(), s3Attributes.getKey()), streamContext);
   }
 
   /**

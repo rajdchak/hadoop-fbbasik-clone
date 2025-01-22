@@ -1897,6 +1897,7 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
       // do not validate() the parameters as the store
     // completes this.
     ObjectReadParameters parameters = new ObjectReadParameters()
+        .withAuditSpan(auditSpan)
         .withBoundedThreadPool(pool)
         .withCallbacks(createInputStreamCallbacks(auditSpan))
         .withContext(readContext.build())
