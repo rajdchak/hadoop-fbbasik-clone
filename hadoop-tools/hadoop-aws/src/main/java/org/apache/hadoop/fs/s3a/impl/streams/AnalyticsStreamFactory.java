@@ -20,7 +20,6 @@
 package org.apache.hadoop.fs.s3a.impl.streams;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.s3a.S3ASeekableInputStream;
 import software.amazon.s3.analyticsaccelerator.S3SdkObjectClient;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamConfiguration;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamFactory;
@@ -30,14 +29,14 @@ import java.io.IOException;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
 
-public class S3ASeekableInputStreamFactory extends AbstractObjectInputStreamFactory {
+public class AnalyticsStreamFactory extends AbstractObjectInputStreamFactory {
 
     private S3SeekableInputStreamConfiguration seekableInputStreamConfiguration;
     private S3SeekableInputStreamFactory s3SeekableInputStreamFactory;
     private boolean requireCrt;
 
-    public S3ASeekableInputStreamFactory() {
-        super("S3ASeekableInputStreamFactory");
+    public AnalyticsStreamFactory() {
+        super("AnalyticsStreamFactory");
     }
 
     @Override
@@ -61,7 +60,7 @@ public class S3ASeekableInputStreamFactory extends AbstractObjectInputStreamFact
 
     @Override
     public ObjectInputStream readObject(final ObjectReadParameters parameters) throws IOException {
-        return new S3ASeekableInputStream(
+        return new AnalyticsStream(
                 parameters,
                 s3SeekableInputStreamFactory);
     }

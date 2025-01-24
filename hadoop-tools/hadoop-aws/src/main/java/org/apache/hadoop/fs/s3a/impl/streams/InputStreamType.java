@@ -44,7 +44,7 @@ public enum InputStreamType {
    * The analytics input stream.
    */
   Analytics("analytics", c ->
-      new S3ASeekableInputStreamFactory());
+      new AnalyticsStreamFactory());
 
   /**
    * Name.

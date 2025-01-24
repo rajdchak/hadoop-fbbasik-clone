@@ -59,7 +59,7 @@ public final class StreamIntegration {
     InputStreamType defaultStream = InputStreamType.DEFAULT_STREAM_TYPE;
 
     if(conf.getEnum(INPUT_STREAM_TYPE, InputStreamType.DEFAULT_STREAM_TYPE) == InputStreamType.Analytics) {
-      LOG.info("Using S3SeekableInputStream");
+      LOG.info("Using AnalyticsStream");
       defaultStream = InputStreamType.Analytics;
 
     } else if (conf.getBoolean(PREFETCH_ENABLED_KEY, false)) {

@@ -31,6 +31,8 @@ import org.apache.hadoop.fs.Path;
 import static org.apache.hadoop.fs.s3a.Constants.*;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
 
+import org.assertj.core.api.Assertions;
+
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamConfiguration;
 import software.amazon.s3.analyticsaccelerator.common.ConnectorConfiguration;
 import software.amazon.s3.analyticsaccelerator.util.PrefetchMode;
@@ -92,11 +94,13 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
     S3SeekableInputStreamConfiguration configuration =
         S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration);
 
-    assertSame("S3ASeekableInputStream configuration is not set to expected value",
-        PrefetchMode.ALL, configuration.getLogicalIOConfiguration().getPrefetchingMode());
+    Assertions.assertThat(configuration.getLogicalIOConfiguration().getPrefetchingMode())
+            .as("AnalyticsStream configuration is not set to expected value")
+            .isSameAs(PrefetchMode.ALL);
 
-    assertEquals("S3ASeekableInputStream configuration is not set to expected value",
-        1, configuration.getPhysicalIOConfiguration().getBlobStoreCapacity());
+    Assertions.assertThat(configuration.getPhysicalIOConfiguration().getBlobStoreCapacity())
+            .as("AnalyticsStream configuration is not set to expected value")
+            .isEqualTo(1);
   }
 
   @Test
@@ -110,7 +114,7 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
   }
 
   @Test
-  public void testInvalidConfigurationThrows() {
+  public void testInvalidConfigurationThrows() throws Exception {
     describe("Verify S3 connector framework throws with invalid configuration");
 
     Configuration conf = getConfiguration();
@@ -121,8 +125,8 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
 
     ConnectorConfiguration connectorConfiguration =
         new ConnectorConfiguration(conf, ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX);
-    assertThrows("S3ASeekableInputStream illegal configuration does not throw",
-        IllegalArgumentException.class, () ->
-            S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration));
+    Assertions.assertThatExceptionOfType(IllegalArgumentException.class)
+            .isThrownBy(() ->
+                    S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration));
   }
 }

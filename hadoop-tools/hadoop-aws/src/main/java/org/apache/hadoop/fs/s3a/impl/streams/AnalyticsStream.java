@@ -17,15 +17,15 @@
  * under the License.
  */
 
-package org.apache.hadoop.fs.s3a;
+package org.apache.hadoop.fs.s3a.impl.streams;
 
 import java.io.EOFException;
 import java.io.IOException;
 
 import org.apache.hadoop.fs.FSExceptionMessages;
 import org.apache.hadoop.fs.StreamCapabilities;
-import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStream;
-import org.apache.hadoop.fs.s3a.impl.streams.ObjectReadParameters;
+import org.apache.hadoop.fs.s3a.Retries;
+import org.apache.hadoop.fs.s3a.S3ObjectAttributes;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,15 +33,15 @@ import org.slf4j.LoggerFactory;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStream;
 import software.amazon.s3.analyticsaccelerator.util.S3URI;
 
-public class S3ASeekableInputStream extends ObjectInputStream implements StreamCapabilities {
+public class AnalyticsStream extends ObjectInputStream implements StreamCapabilities {
 
   private S3SeekableInputStream inputStream;
   private long lastReadCurrentPos = 0;
   private volatile boolean closed;
 
-  public static final Logger LOG = LoggerFactory.getLogger(S3ASeekableInputStream.class);
+  public static final Logger LOG = LoggerFactory.getLogger(AnalyticsStream.class);
 
-  public S3ASeekableInputStream(final ObjectReadParameters parameters, final S3SeekableInputStreamFactory s3SeekableInputStreamFactory) {
+  public AnalyticsStream(final ObjectReadParameters parameters, final S3SeekableInputStreamFactory s3SeekableInputStreamFactory) {
     super(parameters);
     S3ObjectAttributes s3Attributes = parameters.getObjectAttributes();
     this.inputStream = s3SeekableInputStreamFactory.createStream(S3URI.of(s3Attributes.getBucket(), s3Attributes.getKey()));
