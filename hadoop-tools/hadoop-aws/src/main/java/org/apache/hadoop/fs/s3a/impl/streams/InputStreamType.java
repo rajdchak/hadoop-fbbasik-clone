@@ -18,7 +18,6 @@
 
 package org.apache.hadoop.fs.s3a.impl.streams;
 
-import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.apache.hadoop.conf.Configuration;
@@ -44,14 +43,15 @@ public enum InputStreamType {
   /**
    * The analytics input stream.
    */
-  Analytics("analytics", (c, factoryParams) -> new S3ASeekableInputStreamFactory(factoryParams.getS3AsyncClient()));
+  Analytics("analytics", c ->
+      new S3ASeekableInputStreamFactory());
 
   /**
    * Name.
    */
   private final String name;
 
-  private final BiFunction<Configuration, FactoryParams, ObjectInputStreamFactory> factory;
+  private final Function<Configuration, ObjectInputStreamFactory> factory;
   /**
    * String name.
    * @return the name
@@ -60,11 +60,7 @@ public enum InputStreamType {
     return name;
   }
 
-  InputStreamType(String name, Function<Configuration, ObjectInputStreamFactory> factory) {
-    this(name, (c, s) -> factory.apply(c));
-  }
-
-  InputStreamType(String name, BiFunction<Configuration, FactoryParams, ObjectInputStreamFactory> factory) {
+  InputStreamType(String name, final Function<Configuration, ObjectInputStreamFactory> factory) {
     this.name = name;
     this.factory = factory;
   }
@@ -73,7 +69,7 @@ public enum InputStreamType {
    * Factory constructor.
    * @return the factory associated with this stream type.
    */
-  public BiFunction<Configuration, FactoryParams, ObjectInputStreamFactory> factory() {
+  public Function<Configuration, ObjectInputStreamFactory> factory() {
     return factory;
   }
 

@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.fs.s3a.impl.streams;
 
+import org.apache.hadoop.fs.s3a.S3AFileSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,6 +38,8 @@ public final class StreamIntegration {
       LoggerFactory.getLogger(
           "org.apache.hadoop.conf.Configuration.deprecation");
 
+  public static final Logger LOG = LoggerFactory.getLogger(StreamIntegration.class);
+
   /**
    * Warn once on use of prefetch boolean flag rather than enum.
    */
@@ -54,7 +57,12 @@ public final class StreamIntegration {
     // work out the default stream; this includes looking at the
     // deprecated prefetch enabled key to see if it is set.
     InputStreamType defaultStream = InputStreamType.DEFAULT_STREAM_TYPE;
-    if (conf.getBoolean(PREFETCH_ENABLED_KEY, false)) {
+
+    if(conf.getEnum(INPUT_STREAM_TYPE, InputStreamType.DEFAULT_STREAM_TYPE) == InputStreamType.Analytics) {
+      LOG.info("Using S3SeekableInputStream");
+      defaultStream = InputStreamType.Analytics;
+
+    } else if (conf.getBoolean(PREFETCH_ENABLED_KEY, false)) {
 
       // prefetch enabled, warn (once) then change it to be the default.
       WARN_PREFETCH_KEY.info("Using {} is deprecated: choose the appropriate stream in {}",
@@ -66,22 +74,7 @@ public final class StreamIntegration {
     // the default...then instantiate it.
     return conf.getEnum(INPUT_STREAM_TYPE, defaultStream)
         .factory()
-        .apply(conf, null);
+        .apply(conf);
   }
-
-  /**
-   * Create the s3 seekable input stream factory.
-   * @param conf configuration
-   * @param s3AsyncClient s3 async client
-   * @return a stream factory.
-   */
-  public static ObjectInputStreamFactory createStreamFactory(final Configuration conf, final S3AsyncClient s3AsyncClient) {
-    FactoryParams factoryParams = FactoryParams.builder()
-            .withS3AsyncClient(s3AsyncClient)
-            .build();
-    InputStreamType defaultStream = InputStreamType.DEFAULT_STREAM_TYPE;
-    return conf.getEnum(INPUT_STREAM_TYPE, defaultStream)
-            .factory()
-            .apply(conf, factoryParams);  }
 
 }

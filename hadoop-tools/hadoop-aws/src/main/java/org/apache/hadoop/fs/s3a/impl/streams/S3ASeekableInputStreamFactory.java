@@ -21,7 +21,6 @@ package org.apache.hadoop.fs.s3a.impl.streams;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.s3a.S3ASeekableInputStream;
-import software.amazon.awssdk.services.s3.S3AsyncClient;
 import software.amazon.s3.analyticsaccelerator.S3SdkObjectClient;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamConfiguration;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamFactory;
@@ -33,12 +32,12 @@ import static org.apache.hadoop.fs.s3a.Constants.*;
 
 public class S3ASeekableInputStreamFactory extends AbstractObjectInputStreamFactory {
 
-    private final S3AsyncClient s3AsyncClient;
+    private S3SeekableInputStreamConfiguration seekableInputStreamConfiguration;
     private S3SeekableInputStreamFactory s3SeekableInputStreamFactory;
+    private boolean requireCrt;
 
-    public S3ASeekableInputStreamFactory(S3AsyncClient s3AsyncClient) {
+    public S3ASeekableInputStreamFactory() {
         super("S3ASeekableInputStreamFactory");
-        this.s3AsyncClient = s3AsyncClient;
     }
 
     @Override
@@ -46,12 +45,18 @@ public class S3ASeekableInputStreamFactory extends AbstractObjectInputStreamFact
         super.serviceInit(conf);
         ConnectorConfiguration configuration = new ConnectorConfiguration(conf,
                 ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX);
-        S3SeekableInputStreamConfiguration seekableInputStreamConfiguration =
+        this.seekableInputStreamConfiguration =
                 S3SeekableInputStreamConfiguration.fromConfiguration(configuration);
-        this.s3SeekableInputStreamFactory =
-                new S3SeekableInputStreamFactory(
-                        new S3SdkObjectClient(this.s3AsyncClient),
-                        seekableInputStreamConfiguration);
+        this.requireCrt = conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
+                ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
+    }
+
+    @Override
+    public void bind(final StreamFactoryCallbacks factoryCallbacks) throws Exception {
+        super.bind(factoryCallbacks);
+        this.s3SeekableInputStreamFactory = new S3SeekableInputStreamFactory(
+                new S3SdkObjectClient(callbacks().getOrCreateAsyncClient(requireCrt)),
+                seekableInputStreamConfiguration);
     }
 
     @Override

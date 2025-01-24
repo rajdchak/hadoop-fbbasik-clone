@@ -46,7 +46,7 @@ public interface ObjectInputStreamFactory
    * and {@code start()}.
    * @param callbacks extra initialization parameters
    */
-  void bind(StreamFactoryCallbacks callbacks);
+  void bind(StreamFactoryCallbacks callbacks) throws Exception;
 
   /**
    * Create a new input stream.

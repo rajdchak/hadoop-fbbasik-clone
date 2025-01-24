@@ -235,12 +235,6 @@ public class S3AStoreImpl
     // create and register the stream factory, which will
     // then follow the service lifecycle
     objectInputStreamFactory = createStreamFactory(conf);
-    if(conf.getEnum(INPUT_STREAM_TYPE, InputStreamType.DEFAULT_STREAM_TYPE) == InputStreamType.Analytics) {
-      final S3AsyncClient s3AsyncClient = getOrCreateAsyncCRTClient(conf);
-      objectInputStreamFactory = createStreamFactory(conf, s3AsyncClient);
-    } else {
-      objectInputStreamFactory = createStreamFactory(conf);
-    }
     addService(objectInputStreamFactory);
 
     // init all child services, including the stream factory
@@ -248,23 +242,6 @@ public class S3AStoreImpl
 
     // pass down extra information to the stream factory.
     finishStreamFactoryInit();
-  }
-
-
-
-  private S3AsyncClient getOrCreateAsyncCRTClient(final Configuration conf) throws Exception {
-    final S3AsyncClient s3AsyncClient;
-    boolean analyticsAcceleratorCRTEnabled = conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
-            ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
-    LOG.info("Using S3SeekableInputStream");
-    if(analyticsAcceleratorCRTEnabled) {
-      LOG.info("Using S3 CRT client for analytics accelerator S3");
-      s3AsyncClient = S3CrtAsyncClient.builder().maxConcurrency(600).build();
-    } else {
-      LOG.info("Using S3 async client for analytics accelerator S3");
-      s3AsyncClient = getOrCreateAsyncClient();
-    }
-    return s3AsyncClient;
   }
 
   @Override
@@ -969,7 +946,7 @@ public class S3AStoreImpl
    * All stream factory initialization required after {@code Service.init()},
    * after all other services have themselves been initialized.
    */
-  private void finishStreamFactoryInit() {
+  private void finishStreamFactoryInit() throws Exception {
     // must be on be invoked during service initialization
     Preconditions.checkState(isInState(STATE.INITED),
         "Store is in wrong state: %s", getServiceState());
