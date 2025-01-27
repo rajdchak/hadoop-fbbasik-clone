@@ -52,8 +52,6 @@ import static org.apache.hadoop.fs.contract.ContractTestUtils.readStream;
 import static org.apache.hadoop.fs.contract.ContractTestUtils.skip;
 import static org.apache.hadoop.fs.contract.ContractTestUtils.writeTextFile;
 import static org.apache.hadoop.fs.s3a.Constants.CHECKSUM_VALIDATION;
-import static org.apache.hadoop.fs.s3a.Constants.PREFETCH_ENABLED_DEFAULT;
-import static org.apache.hadoop.fs.s3a.Constants.PREFETCH_ENABLED_KEY;
 import static org.apache.hadoop.fs.s3a.S3ATestUtils.*;
 import static org.apache.hadoop.fs.s3a.Statistic.STREAM_READ_BYTES_READ_CLOSE;
 import static org.apache.hadoop.fs.s3a.Statistic.STREAM_READ_OPENED;
@@ -450,8 +448,8 @@ public class ITestS3AOpenCost extends AbstractS3ACostTest {
    * @return true if the fs has prefetching enabled.
    */
   private boolean prefetching()  {
-    return getFileSystem().getConf().getBoolean(
-        PREFETCH_ENABLED_KEY, PREFETCH_ENABLED_DEFAULT);
+    return isPrefetchingEnabled(getFileSystem().getConf());
+
   }
 
   /**

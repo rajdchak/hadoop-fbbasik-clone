@@ -35,6 +35,7 @@ import org.apache.hadoop.fs.statistics.IOStatistics;
 import org.apache.hadoop.test.LambdaTestUtils;
 
 import static org.apache.hadoop.fs.s3a.Constants.*;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.enablePrefetching;
 import static org.apache.hadoop.fs.statistics.IOStatisticAssertions.assertThatStatisticMaximum;
 import static org.apache.hadoop.fs.statistics.IOStatisticAssertions.verifyStatisticCounterValue;
 import static org.apache.hadoop.fs.statistics.IOStatisticAssertions.verifyStatisticGaugeValue;
@@ -73,10 +74,8 @@ public class ITestS3APrefetchingInputStream extends AbstractS3ACostTest {
 
   @Override
   public Configuration createConfiguration() {
-    Configuration conf = super.createConfiguration();
-    S3ATestUtils.removeBaseAndBucketOverrides(conf, PREFETCH_ENABLED_KEY);
+    Configuration conf = enablePrefetching(super.createConfiguration());
     S3ATestUtils.removeBaseAndBucketOverrides(conf, PREFETCH_BLOCK_SIZE_KEY);
-    conf.setBoolean(PREFETCH_ENABLED_KEY, true);
     conf.setInt(PREFETCH_BLOCK_SIZE_KEY, BLOCK_SIZE);
     // When both Prefetching and Analytics Accelerator enabled Analytics Accelerator is used
     conf.setBoolean(ANALYTICS_ACCELERATOR_ENABLED_KEY, false);
