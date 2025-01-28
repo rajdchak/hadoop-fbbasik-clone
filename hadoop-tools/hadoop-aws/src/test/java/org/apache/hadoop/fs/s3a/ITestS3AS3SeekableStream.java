@@ -42,13 +42,13 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
   private static final String PHYSICAL_IO_PREFIX = "physicalio";
   private static final String LOGICAL_IO_PREFIX = "logicalio";
 
-  public void testConnectorFrameWorkIntegration(boolean useCrtClient) throws IOException {
+  @Test
+  public void testConnectorFrameWorkIntegration() throws IOException {
     describe("Verify S3 connector framework integration");
 
     Configuration conf = getConfiguration();
     removeBaseAndBucketOverrides(conf, INPUT_STREAM_TYPE);
     conf.set(INPUT_STREAM_TYPE, "Analytics");
-    conf.setBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED, useCrtClient);
 
     String testFile = "s3a://noaa-cors-pds/raw/2023/017/ohfh/OHFH017d.23_.gz";
     S3AFileSystem s3AFileSystem =
@@ -63,16 +63,7 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
   }
 
   @Test
-  public void testConnectorFrameWorkIntegrationWithCrtClient() throws IOException {
-    testConnectorFrameWorkIntegration(true);
-  }
-
-  @Test
-  public void testConnectorFrameWorkIntegrationWithoutCrtClient() throws IOException {
-    testConnectorFrameWorkIntegration(false);
-  }
-
-  public void testConnectorFrameworkConfigurable(boolean useCrtClient) {
+  public void testConnectorFrameworkConfigurable() {
     describe("Verify S3 connector framework reads configuration");
 
     Configuration conf = getConfiguration();
@@ -85,8 +76,6 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
     //Set Blobstore Capacity
     conf.setInt(ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX +
         "." + PHYSICAL_IO_PREFIX + ".blobstore.capacity", 1);
-
-    conf.setBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED, useCrtClient);
 
     ConnectorConfiguration connectorConfiguration =
         new ConnectorConfiguration(conf, ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX);
@@ -101,16 +90,6 @@ public class ITestS3AS3SeekableStream extends AbstractS3ATestBase {
     Assertions.assertThat(configuration.getPhysicalIOConfiguration().getBlobStoreCapacity())
             .as("AnalyticsStream configuration is not set to expected value")
             .isEqualTo(1);
-  }
-
-  @Test
-  public void testConnectorFrameworkConfigurableWithoutCrtClient() throws IOException {
-    testConnectorFrameworkConfigurable(false);
-  }
-
-  @Test
-  public void testConnectorFrameworkConfigurableWithCrtClient() throws IOException {
-    testConnectorFrameworkConfigurable(true);
   }
 
   @Test

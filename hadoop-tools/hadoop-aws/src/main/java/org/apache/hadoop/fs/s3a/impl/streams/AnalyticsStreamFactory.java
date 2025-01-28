@@ -46,8 +46,7 @@ public class AnalyticsStreamFactory extends AbstractObjectInputStreamFactory {
                 ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX);
         this.seekableInputStreamConfiguration =
                 S3SeekableInputStreamConfiguration.fromConfiguration(configuration);
-        this.requireCrt = conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
-                ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
+        this.requireCrt = false;
     }
 
     @Override

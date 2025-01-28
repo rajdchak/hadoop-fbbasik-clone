@@ -339,8 +339,6 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
   // If true, S3SeekableInputStream from Analytics Accelerator for Amazon S3 will be used.
   private boolean analyticsAcceleratorEnabled;
 
-  private boolean analyticsAcceleratorCRTEnabled;
-
   private int executorCapacity;
   private long multiPartThreshold;
   public static final Logger LOG = LoggerFactory.getLogger(S3AFileSystem.class);
@@ -656,14 +654,11 @@ public class S3AFileSystem extends FileSystem implements StreamCapabilities,
           s3ExpressStore);
 
         this.analyticsAcceleratorEnabled = conf.getEnum(INPUT_STREAM_TYPE, InputStreamType.DEFAULT_STREAM_TYPE) == InputStreamType.Analytics;
-        this.analyticsAcceleratorCRTEnabled =
-            conf.getBoolean(ANALYTICS_ACCELERATOR_CRT_ENABLED,
-                ANALYTICS_ACCELERATOR_CRT_ENABLED_DEFAULT);
 
       this.isMultipartUploadEnabled = conf.getBoolean(MULTIPART_UPLOADS_ENABLED,
               DEFAULT_MULTIPART_UPLOAD_ENABLED);
 
-      if(this.analyticsAcceleratorEnabled && !analyticsAcceleratorCRTEnabled) {
+      if(this.analyticsAcceleratorEnabled) {
         // Temp change: Analytics Accelerator with S3AsyncClient do not support Multi-part upload.
         this.isMultipartUploadEnabled = false;
       }
