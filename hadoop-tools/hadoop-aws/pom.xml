@@ -487,7 +487,8 @@
     <dependency>
       <groupId>software.amazon.s3.analyticsaccelerator</groupId>
       <artifactId>analyticsaccelerator-s3</artifactId>
-      <scope>compile</scope>
+      <scope>system</scope>
+      <systemPath>${project.basedir}/libaws/analyticsaccelerator-s3-SNAPSHOT.jar</systemPath>
     </dependency>
     <dependency>
       <groupId>org.assertj</groupId>
