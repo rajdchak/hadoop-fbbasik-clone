@@ -55,8 +55,6 @@ public class ITestS3AHugeFilesSSECDiskBlocks
   public void setup() throws Exception {
     try {
       super.setup();
-      skipIfAnalyticsAcceleratorEnabled(getConfiguration(),
-          "Analytics Accelerator currently does not support SSE-C");
     } catch (AccessDeniedException | AWSUnsupportedFeatureException e) {
       skip("Bucket does not allow " + S3AEncryptionMethods.SSE_C + " encryption method");
     }

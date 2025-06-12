@@ -22,7 +22,10 @@ package org.apache.hadoop.fs.s3a;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.lang.reflect.Field;
 
+import org.apache.hadoop.fs.contract.s3a.S3AContract;
+import org.apache.hadoop.fs.s3a.impl.streams.AnalyticsStream;
 import org.junit.Before;
 import org.junit.Test;
 import org.assertj.core.api.Assertions;
@@ -36,15 +39,18 @@ import org.apache.hadoop.fs.s3a.impl.streams.InputStreamType;
 import org.apache.hadoop.fs.s3a.impl.streams.ObjectInputStream;
 import org.apache.hadoop.fs.statistics.IOStatistics;
 
+import software.amazon.s3.analyticsaccelerator.S3SeekableInputStream;
 import software.amazon.s3.analyticsaccelerator.S3SeekableInputStreamConfiguration;
 import software.amazon.s3.analyticsaccelerator.common.ConnectorConfiguration;
+import software.amazon.s3.analyticsaccelerator.util.OpenStreamInformation;
 
 import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_READ_POLICY;
 import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_READ_POLICY_PARQUET;
 import static org.apache.hadoop.fs.Options.OpenFileOptions.FS_OPTION_OPENFILE_READ_POLICY_WHOLE_FILE;
-import static org.apache.hadoop.fs.s3a.Constants.ANALYTICS_ACCELERATOR_CONFIGURATION_PREFIX;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.enableAnalyticsAccelerator;
-import static org.apache.hadoop.fs.s3a.S3ATestUtils.removeBaseAndBucketOverrides;
+import static org.apache.hadoop.fs.contract.ContractTestUtils.dataset;
+import static org.apache.hadoop.fs.contract.ContractTestUtils.writeDataset;
+import static org.apache.hadoop.fs.s3a.Constants.*;
+import static org.apache.hadoop.fs.s3a.S3ATestUtils.*;
 import static org.apache.hadoop.fs.s3a.test.PublicDatasetTestUtils.getExternalData;
 import static org.apache.hadoop.fs.statistics.IOStatisticAssertions.verifyStatisticCounterValue;
 import static org.apache.hadoop.fs.statistics.StreamStatisticNames.STREAM_READ_ANALYTICS_OPENED;
@@ -64,6 +70,7 @@ import static org.apache.hadoop.test.LambdaTestUtils.intercept;
 public class ITestS3AAnalyticsAcceleratorStreamReading extends AbstractS3ATestBase {
 
   private static final String PHYSICAL_IO_PREFIX = "physicalio";
+  private static final String SSEC_KEY = "4niV/jPK5VFRHY+KNb6wtqYd4xXyMgdJ9XQJpcQUVbs=";
 
   private Path externalTestFile;
 
@@ -193,5 +200,62 @@ public class ITestS3AAnalyticsAcceleratorStreamReading extends AbstractS3ATestBa
     intercept(IllegalArgumentException.class,
         () -> S3SeekableInputStreamConfiguration.fromConfiguration(connectorConfiguration));
   }
+
+  /**
+   * This test verifies that the OpenStreamInfo object contains correct encryption
+   * settings when reading an SSEC encrypted file with analytics stream.
+   *
+   * @throws Exception
+   */
+
+  @Test
+  public void testAnalyticsStreamOpenStreamInfoWhenSSECEncryptionEnabled() throws Exception {
+    Configuration confSSEC = this.createConfiguration();
+    S3ATestUtils.disableFilesystemCaching(confSSEC);
+    removeBaseAndBucketOverrides(getTestBucketName(confSSEC), confSSEC, S3_ENCRYPTION_ALGORITHM, S3_ENCRYPTION_KEY);
+
+    confSSEC.set(S3_ENCRYPTION_ALGORITHM, S3AEncryptionMethods.SSE_C.getMethod());
+    confSSEC.set(S3_ENCRYPTION_KEY, SSEC_KEY);
+
+    S3AContract contractSSEC = (S3AContract) createContract(confSSEC);
+    contractSSEC.init();
+    contractSSEC.setConf(confSSEC);
+    S3AFileSystem fileSystemSSEC = (S3AFileSystem) contractSSEC.getTestFileSystem();
+
+    int len = TEST_FILE_LEN;
+    describe("Create an encrypted file and verify OpenStreamInfo encryption settings");
+    Path src = methodPath();
+    byte[] data = dataset(len, 'a', 'z');
+    writeDataset(fileSystemSSEC, src, data, len, 1024 * 1024, true);
+    // Read with encryption settings
+    OpenStreamInformation originalInfo;
+    try (FSDataInputStream in = fileSystemSSEC.open(src)) {
+      AnalyticsStream s3AInputStream = (AnalyticsStream) in.getWrappedStream();
+      Field inputStreamField = s3AInputStream.getClass().getDeclaredField("inputStream");
+      inputStreamField.setAccessible(true);
+      S3SeekableInputStream seekableInputStream = (S3SeekableInputStream) inputStreamField.get(s3AInputStream);
+
+      Field logicalIOField = seekableInputStream.getClass().getDeclaredField("logicalIO");
+      logicalIOField.setAccessible(true);
+      Object logicalIO = logicalIOField.get(seekableInputStream);
+
+      Field physicalIOField = logicalIO.getClass().getDeclaredField("physicalIO");
+      physicalIOField.setAccessible(true);
+      Object physicalIO = physicalIOField.get(logicalIO);
+
+      Field openStreamInfoField = physicalIO.getClass().getDeclaredField("openStreamInformation");
+      openStreamInfoField.setAccessible(true);
+      originalInfo = (OpenStreamInformation) openStreamInfoField.get(physicalIO);
+
+      // Verify the OpenStreamInfo object exists
+      assertNotNull(originalInfo.getEncryptionSecrets().getSsecCustomerKey().get(), "OpenStreamInfo should not be null");
+      assertEquals(SSEC_KEY, originalInfo.getEncryptionSecrets().getSsecCustomerKey().get());
+    }
+
+    // Clean up
+    fileSystemSSEC.delete(src, false);
+  }
+
+
 
 }
